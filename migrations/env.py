@@ -1,9 +1,7 @@
 from logging.config import fileConfig
-
 import asyncio
 
 from alembic import context
-
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -11,83 +9,78 @@ from app.core.config import settings
 from app.core.database import Base
 
 
-# ---------------------------------------------------------
-# Import all models
-# ---------------------------------------------------------
-#
-# These imports ensure SQLAlchemy registers all model
-# tables in Base.metadata before Alembic compares them
-# with the database.
-#
-
+# Import all models so SQLAlchemy metadata contains every table.
 from app.models.tenant import Tenant
 from app.models.user import User
 from app.models.role import Role
 from app.models.user_role import UserRole
-
 from app.models.category import Category
-
 from app.models.product import Product
 from app.models.product_variant import ProductVariant
-
 from app.models.customer import Customer
-
 from app.models.bill import Bill
 from app.models.bill_item import BillItem
 from app.models.payment import Payment
-
 from app.models.kadan_account import KadanAccount
 from app.models.kadan_transaction import KadanTransaction
-
 from app.models.audit_log import AuditLog
 from app.models.subscription import Subscription
 
 
-# ---------------------------------------------------------
-# Alembic Config object
-# ---------------------------------------------------------
-
+# Alembic Config object.
 config = context.config
 
 
-# ---------------------------------------------------------
-# Set up Python logging from alembic.ini
-# ---------------------------------------------------------
-
+# Configure Python logging from alembic.ini.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 
-# ---------------------------------------------------------
-# SQLAlchemy metadata
-# ---------------------------------------------------------
-#
-# Alembic uses this metadata to detect model changes.
-#
-
+# SQLAlchemy metadata used by Alembic autogenerate.
 target_metadata = Base.metadata
 
 
 # ---------------------------------------------------------
-# Database URL
+# DATABASE URL
 # ---------------------------------------------------------
 #
-# Load DATABASE_URL from .env through our Settings class.
+# Local development may already use:
 #
+# postgresql+asyncpg://...
+#
+# Railway PostgreSQL may provide:
+#
+# postgresql://...
+#
+# SQLAlchemy's async engine requires the asyncpg driver,
+# so normalize the URL here.
+# ---------------------------------------------------------
 
+database_url = settings.DATABASE_URL
+
+if database_url.startswith("postgresql://"):
+    database_url = database_url.replace(
+        "postgresql://",
+        "postgresql+asyncpg://",
+        1,
+    )
+
+
+# Escape '%' characters because Alembic ConfigParser
+# treats '%' as interpolation syntax.
 config.set_main_option(
     "sqlalchemy.url",
-    settings.DATABASE_URL.replace("%", "%%"),
+    database_url.replace("%", "%%"),
 )
 
 
 # ---------------------------------------------------------
-# Offline migrations
+# OFFLINE MIGRATIONS
 # ---------------------------------------------------------
 
 def run_migrations_offline() -> None:
     """
-    Run migrations without connecting to the database.
+    Run migrations without creating a live database connection.
     """
 
     url = config.get_main_option("sqlalchemy.url")
@@ -106,12 +99,12 @@ def run_migrations_offline() -> None:
 
 
 # ---------------------------------------------------------
-# Online migration helper
+# ONLINE MIGRATIONS
 # ---------------------------------------------------------
 
 def do_run_migrations(connection) -> None:
     """
-    Run migrations using an active database connection.
+    Configure Alembic using an active database connection.
     """
 
     context.configure(
@@ -123,13 +116,9 @@ def do_run_migrations(connection) -> None:
         context.run_migrations()
 
 
-# ---------------------------------------------------------
-# Async migration runner
-# ---------------------------------------------------------
-
 async def run_async_migrations() -> None:
     """
-    Create an async engine and run migrations.
+    Create an async SQLAlchemy engine and run migrations.
     """
 
     connectable = async_engine_from_config(
@@ -149,13 +138,9 @@ async def run_async_migrations() -> None:
     await connectable.dispose()
 
 
-# ---------------------------------------------------------
-# Online migrations
-# ---------------------------------------------------------
-
 def run_migrations_online() -> None:
     """
-    Run migrations with a database connection.
+    Run Alembic migrations using the async engine.
     """
 
     asyncio.run(
@@ -164,7 +149,7 @@ def run_migrations_online() -> None:
 
 
 # ---------------------------------------------------------
-# Entry Point
+# ENTRY POINT
 # ---------------------------------------------------------
 
 if context.is_offline_mode():
