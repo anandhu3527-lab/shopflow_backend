@@ -9,3 +9,4 @@ argon2-cffi
 pytest 
 httpx
 slowapi
+email-validator
