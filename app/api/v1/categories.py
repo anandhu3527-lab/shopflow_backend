@@ -25,7 +25,7 @@ router = APIRouter(
 async def create_category(
     data: CategoryCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(require_roles(["OWNER", "MANAGER"])),
+    current_user: dict = Depends(require_roles(["OWNER", "MANAGER","EMPLOYEE"])),
 ):
 
     tenant_id = current_user["tenant_id"]
