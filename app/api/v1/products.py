@@ -53,7 +53,7 @@ router = APIRouter(
 async def create_product(
     data: ProductWithVariantsCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(require_roles(["OWNER", "MANAGER"])),
+    current_user: dict = Depends(require_roles(["OWNER", "MANAGER","EMPLOYEE"])),
 ):
 
     tenant_id = current_user["tenant_id"]
