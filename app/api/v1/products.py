@@ -290,7 +290,7 @@ async def update_variant(
     variant_id: UUID,
     data: ProductVariantUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(require_roles(["OWNER", "MANAGER",,"EMPLOYEE"])),
+    current_user: dict = Depends(require_roles(["OWNER", "MANAGER","EMPLOYEE"])),
 ):
 
     # -----------------------------------------------------
