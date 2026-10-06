@@ -8,7 +8,6 @@ from fastapi import (
     Query,
     status,
 )
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -53,15 +52,21 @@ async def create_bill(
     """
     Create a new bill.
 
-    Tenant and user IDs come from the authenticated user.
+    Tenant and user IDs are always taken from
+    the authenticated user.
 
     Frontend does NOT send:
         tenant_id
         user_id
+        total_amount
+
+    Frontend may send:
+        discount_amount
+        paid_amount
+        payment_method
     """
 
     tenant_id = current_user["tenant_id"]
-
     user_id = current_user["user_id"]
 
     result = await billing_service.create_bill(
@@ -74,18 +79,30 @@ async def create_bill(
     bill = result["bill"]
     kadan = result.get("kadan")
 
+    kadan_amount = (
+        kadan.get("kadan_amount")
+        if kadan
+        else Decimal("0.00")
+    )
+
     return BillCreateResponse(
         type="success",
         message="Bill created successfully",
         data=BillCreateResponseData(
             bill_id=bill.id,
             bill_number=bill.bill_number,
+
+            subtotal=bill.subtotal,
+            discount_amount=bill.discount_amount,
+            tax_amount=bill.tax_amount,
             total_amount=bill.total_amount,
+
             paid_amount=data.paid_amount,
-            kadan_amount=kadan.get("kadan_amount") if kadan else Decimal("0"),
+            kadan_amount=kadan_amount,
+
             payment_method=data.payment_method,
             created_at=bill.created_at,
-        )
+        ),
     )
 
 
@@ -93,9 +110,7 @@ async def create_bill(
 # GET ALL BILLS
 # ============================================================
 
-@router.get(
-    "",
-)
+@router.get("")
 async def get_bills(
     limit: int = Query(
         default=50,
@@ -109,7 +124,6 @@ async def get_bills(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-
     tenant_id = current_user["tenant_id"]
 
     bills = await bill_repository.get_bills(
@@ -135,7 +149,10 @@ async def get_bills(
     response_model=DateSummaryResponse,
 )
 async def get_date_summary(
-    date: str = Query(..., description="Date in YYYY-MM-DD format"),
+    date: str = Query(
+        ...,
+        description="Date in YYYY-MM-DD format",
+    ),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -161,7 +178,6 @@ async def get_bill_by_number(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-
     tenant_id = current_user["tenant_id"]
 
     bill = await bill_repository.get_bill_by_number(
@@ -171,7 +187,6 @@ async def get_bill_by_number(
     )
 
     if bill is None:
-
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Bill not found",
@@ -193,7 +208,6 @@ async def get_bill(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-
     tenant_id = current_user["tenant_id"]
 
     bill = await bill_repository.get_bill_by_id(
@@ -203,7 +217,6 @@ async def get_bill(
     )
 
     if bill is None:
-
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Bill not found",
