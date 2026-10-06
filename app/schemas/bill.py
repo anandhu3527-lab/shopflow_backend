@@ -10,10 +10,22 @@ from pydantic import (
 )
 
 
+# ============================================================
+# BILL ITEM CREATE
+# ============================================================
+
 class BillItemCreate(BaseModel):
     variant_id: UUID
-    quantity: Decimal = Field(..., gt=0)
 
+    quantity: Decimal = Field(
+        ...,
+        gt=0,
+    )
+
+
+# ============================================================
+# BILL CREATE
+# ============================================================
 
 class BillCreate(BaseModel):
     customer_name: str | None = Field(
@@ -33,6 +45,29 @@ class BillCreate(BaseModel):
         min_length=1,
     )
 
+    # --------------------------------------------------------
+    # BILL-LEVEL DISCOUNT
+    # --------------------------------------------------------
+    #
+    # Example:
+    #
+    # Subtotal = ₹300
+    # Discount = ₹30
+    # Tax = ₹0
+    # Final total = ₹270
+    #
+    # The backend calculates the final total.
+    # Frontend must never send total_amount.
+    #
+    discount_amount: Decimal = Field(
+        default=Decimal("0.00"),
+        ge=0,
+    )
+
+    # --------------------------------------------------------
+    # PAYMENT
+    # --------------------------------------------------------
+
     paid_amount: Decimal = Field(
         ...,
         ge=0,
@@ -44,10 +79,13 @@ class BillCreate(BaseModel):
         max_length=20,
     )
 
+    # ========================================================
+    # CUSTOMER NAME
+    # ========================================================
+
     @field_validator("customer_name")
     @classmethod
     def validate_customer_name(cls, value):
-
         if value is None:
             return None
 
@@ -58,14 +96,23 @@ class BillCreate(BaseModel):
 
         return value
 
+    # ========================================================
+    # CUSTOMER PHONE
+    # ========================================================
+
     @field_validator("customer_phone")
     @classmethod
     def validate_customer_phone(cls, value):
-
         if value is None:
             return None
 
-        value = value.strip().replace(" ", "").replace("-", "")
+        value = (
+            value
+            .strip()
+            .replace(" ", "")
+            .replace("-", "")
+        )
+
         if value.startswith("+91"):
             value = value[3:]
 
@@ -74,10 +121,29 @@ class BillCreate(BaseModel):
 
         return value
 
+    # ========================================================
+    # DISCOUNT
+    # ========================================================
+
+    @field_validator("discount_amount")
+    @classmethod
+    def validate_discount_amount(cls, value):
+        value = Decimal(str(value))
+
+        if value < Decimal("0.00"):
+            raise ValueError(
+                "Discount amount cannot be negative."
+            )
+
+        return value.quantize(Decimal("0.01"))
+
+    # ========================================================
+    # PAYMENT METHOD
+    # ========================================================
+
     @field_validator("payment_method")
     @classmethod
     def validate_payment_method(cls, value):
-
         value = value.strip().upper()
 
         allowed_methods = {
@@ -93,10 +159,14 @@ class BillCreate(BaseModel):
 
         return value
 
+    # ========================================================
+    # PAYMENT COMBINATION
+    # ========================================================
+
     @model_validator(mode="after")
     def validate_payment_combination(self):
 
-        # KADAN means no payment made now
+        # KADAN means no money received now.
         if (
             self.payment_method == "KADAN"
             and self.paid_amount != Decimal("0")
@@ -105,27 +175,32 @@ class BillCreate(BaseModel):
                 "KADAN payment method requires paid_amount to be 0"
             )
 
-        # CASH/UPI means some amount is actually paid
-        if (
-            self.payment_method in {"CASH", "UPI"}
-            and self.paid_amount <= Decimal("0")
-        ):
-            raise ValueError(
-                "CASH or UPI payment requires paid_amount greater than 0"
-            )
-
         return self
 
+
+# ============================================================
+# BILL CREATE RESPONSE DATA
+# ============================================================
 
 class BillCreateResponseData(BaseModel):
     bill_id: UUID
     bill_number: str
+
+    subtotal: Decimal
+    discount_amount: Decimal
+    tax_amount: Decimal
     total_amount: Decimal
+
     paid_amount: Decimal
     kadan_amount: Decimal
+
     payment_method: str
     created_at: datetime
 
+
+# ============================================================
+# BILL CREATE RESPONSE
+# ============================================================
 
 class BillCreateResponse(BaseModel):
     type: str
@@ -133,6 +208,9 @@ class BillCreateResponse(BaseModel):
     data: BillCreateResponseData
 
 
+# ============================================================
+# BILL ITEM RESPONSE
+# ============================================================
 
 class BillItemResponse(BaseModel):
     id: UUID
@@ -160,6 +238,10 @@ class BillItemResponse(BaseModel):
     }
 
 
+# ============================================================
+# PAYMENT RESPONSE
+# ============================================================
+
 class PaymentResponse(BaseModel):
     id: UUID
     bill_id: UUID
@@ -178,11 +260,19 @@ class PaymentResponse(BaseModel):
     }
 
 
+# ============================================================
+# KADAN SUMMARY
+# ============================================================
+
 class KadanSummary(BaseModel):
     paid_amount: Decimal
     kadan_amount: Decimal
     outstanding_amount: Decimal
 
+
+# ============================================================
+# BILL CUSTOMER RESPONSE
+# ============================================================
 
 class BillCustomerResponse(BaseModel):
     id: UUID
@@ -193,6 +283,10 @@ class BillCustomerResponse(BaseModel):
         "from_attributes": True
     }
 
+
+# ============================================================
+# BILL RESPONSE
+# ============================================================
 
 class BillResponse(BaseModel):
     id: UUID
@@ -226,15 +320,27 @@ class BillResponse(BaseModel):
     }
 
 
+# ============================================================
+# MONTH SUMMARY
+# ============================================================
+
 class MonthSummary(BaseModel):
     total_bills: int
     total_sales: Decimal
 
 
+# ============================================================
+# DATE SUMMARY
+# ============================================================
+
 class DateSummary(BaseModel):
     total_bills: int
     total_sales: Decimal
 
+
+# ============================================================
+# DATE SUMMARY BILL
+# ============================================================
 
 class DateSummaryBillResponse(BaseModel):
     id: UUID
@@ -248,9 +354,15 @@ class DateSummaryBillResponse(BaseModel):
     }
 
 
+# ============================================================
+# DATE SUMMARY RESPONSE
+# ============================================================
+
 class DateSummaryResponse(BaseModel):
     date: str
     month: str
+
     month_summary: MonthSummary
     date_summary: DateSummary
-    bills: list[DateSummaryBillResponse]
+
+    bills: list[DateSummaryBillResponse]
