@@ -37,15 +37,10 @@ class BillRepository:
                 ProductVariant.tenant_id == tenant_id,
                 ProductVariant.status == "ACTIVE",
             )
-            # Lock the variants while creating the bill.
-            # This helps prevent two simultaneous bills from
-            # reducing the same stock incorrectly.
             .with_for_update()
         )
 
-        return list(
-            result.scalars().all()
-        )
+        return list(result.scalars().all())
 
     # ============================================================
     # GET CUSTOMER BY PHONE
@@ -94,27 +89,6 @@ class BillRepository:
 
     # ============================================================
     # GET HIGHEST BILL NUMBER
-    #
-    # Existing database:
-    #
-    # BILL-000001
-    # BILL-000002
-    # BILL-000003
-    # BILL-000004
-    # BILL-000005
-    # 1
-    # 2
-    # 3
-    #
-    # This query ONLY looks at BILL-XXXXXX format.
-    #
-    # Result:
-    #
-    # 5
-    #
-    # Service then generates:
-    #
-    # BILL-000006
     # ============================================================
 
     async def get_latest_bill_number(
@@ -122,8 +96,9 @@ class BillRepository:
         db: AsyncSession,
         tenant_id: UUID,
     ):
-        # Serialize bill generation for this tenant using a row lock
         from app.models.tenant import Tenant
+
+        # Lock tenant row to serialize bill number generation.
         await db.execute(
             select(Tenant.id)
             .where(Tenant.id == tenant_id)
@@ -230,7 +205,6 @@ class BillRepository:
             )
         )
 
-        # Lock Kadan account when updating the balance.
         if for_update:
             query = query.with_for_update()
 
@@ -350,7 +324,7 @@ class BillRepository:
                 selectinload(Bill.customer),
             )
             .where(
-                Bill.tenant_id == tenant_id
+                Bill.tenant_id == tenant_id,
             )
             .order_by(
                 Bill.created_at.desc()
@@ -362,7 +336,6 @@ class BillRepository:
         return list(
             result.scalars().unique().all()
         )
-
 
     # ============================================================
     # DATE SUMMARY STATS
@@ -392,6 +365,7 @@ class BillRepository:
         )
 
         row = result.first()
+
         return {
             "total_bills": row[0] or 0,
             "total_sales": row[1] or Decimal("0.00"),
@@ -415,7 +389,9 @@ class BillRepository:
                 Bill.created_at >= start_date,
                 Bill.created_at < end_date,
             )
-            .order_by(Bill.created_at.desc())
+            .order_by(
+                Bill.created_at.desc()
+            )
         )
 
         return list(result.scalars().all())
