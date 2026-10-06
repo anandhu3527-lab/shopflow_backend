@@ -12,7 +12,11 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import (
+    Mapped,
+    mapped_column,
+    relationship,
+)
 
 from app.core.database import Base
 
@@ -26,6 +30,7 @@ if TYPE_CHECKING:
 
 
 class Bill(Base):
+
     __tablename__ = "bills"
 
     __table_args__ = (
@@ -36,9 +41,9 @@ class Bill(Base):
         ),
     )
 
-    # ---------------------------------------------------------
-    # Primary Key
-    # ---------------------------------------------------------
+    # ========================================================
+    # PRIMARY KEY
+    # ========================================================
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -46,9 +51,9 @@ class Bill(Base):
         default=uuid.uuid4,
     )
 
-    # ---------------------------------------------------------
-    # Tenant
-    # ---------------------------------------------------------
+    # ========================================================
+    # TENANT
+    # ========================================================
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -60,9 +65,9 @@ class Bill(Base):
         index=True,
     )
 
-    # ---------------------------------------------------------
-    # Customer
-    # ---------------------------------------------------------
+    # ========================================================
+    # CUSTOMER
+    # ========================================================
 
     customer_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
@@ -74,20 +79,32 @@ class Bill(Base):
         index=True,
     )
 
-    # ---------------------------------------------------------
-    # Bill Information
-    # ---------------------------------------------------------
+    # ========================================================
+    # BILL INFORMATION
+    # ========================================================
 
     bill_number: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
     )
 
+    # ========================================================
+    # FINANCIAL VALUES
+    # ========================================================
+
     subtotal: Mapped[Decimal] = mapped_column(
         Numeric(12, 2),
         nullable=False,
     )
 
+    # Bill-level discount.
+    #
+    # Example:
+    # subtotal = 300
+    # discount = 30
+    # tax = 0
+    # total = 270
+    #
     discount_amount: Mapped[Decimal] = mapped_column(
         Numeric(12, 2),
         nullable=False,
@@ -105,6 +122,10 @@ class Bill(Base):
         nullable=False,
     )
 
+    # ========================================================
+    # STATUS
+    # ========================================================
+
     status: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
@@ -112,9 +133,9 @@ class Bill(Base):
         index=True,
     )
 
-    # ---------------------------------------------------------
-    # Created By
-    # ---------------------------------------------------------
+    # ========================================================
+    # CREATED BY
+    # ========================================================
 
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
@@ -126,9 +147,9 @@ class Bill(Base):
         index=True,
     )
 
-    # ---------------------------------------------------------
-    # Timestamps
-    # ---------------------------------------------------------
+    # ========================================================
+    # TIMESTAMPS
+    # ========================================================
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -144,9 +165,9 @@ class Bill(Base):
         onupdate=func.now(),
     )
 
-    # =========================================================
-    # Relationships
-    # =========================================================
+    # ========================================================
+    # RELATIONSHIPS
+    # ========================================================
 
     tenant: Mapped["Tenant"] = relationship(
         "Tenant",
