@@ -25,10 +25,6 @@ from app.services.billing_service import billing_service
 from app.repositories.bill_repository import bill_repository
 
 
-# ============================================================
-# ROUTER
-# ============================================================
-
 router = APIRouter(
     prefix="/bills",
     tags=["Billing"],
@@ -49,23 +45,6 @@ async def create_bill(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    """
-    Create a new bill.
-
-    Tenant and user IDs are always taken from
-    the authenticated user.
-
-    Frontend does NOT send:
-        tenant_id
-        user_id
-        total_amount
-
-    Frontend may send:
-        discount_amount
-        paid_amount
-        payment_method
-    """
-
     tenant_id = current_user["tenant_id"]
     user_id = current_user["user_id"]
 
@@ -80,7 +59,7 @@ async def create_bill(
     kadan = result.get("kadan")
 
     kadan_amount = (
-        kadan.get("kadan_amount")
+        kadan.get("kadan_amount", Decimal("0.00"))
         if kadan
         else Decimal("0.00")
     )
@@ -91,15 +70,12 @@ async def create_bill(
         data=BillCreateResponseData(
             bill_id=bill.id,
             bill_number=bill.bill_number,
-
             subtotal=bill.subtotal,
             discount_amount=bill.discount_amount,
             tax_amount=bill.tax_amount,
             total_amount=bill.total_amount,
-
             paid_amount=data.paid_amount,
             kadan_amount=kadan_amount,
-
             payment_method=data.payment_method,
             created_at=bill.created_at,
         ),
@@ -112,15 +88,8 @@ async def create_bill(
 
 @router.get("")
 async def get_bills(
-    limit: int = Query(
-        default=50,
-        ge=1,
-        le=100,
-    ),
-    offset: int = Query(
-        default=0,
-        ge=0,
-    ),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
@@ -141,7 +110,7 @@ async def get_bills(
 
 
 # ============================================================
-# GET DATE SUMMARY
+# DATE SUMMARY
 # ============================================================
 
 @router.get(
@@ -163,6 +132,74 @@ async def get_date_summary(
         tenant_id=tenant_id,
         target_date_str=date,
     )
+
+
+# ============================================================
+# BUILD BILL DETAIL RESPONSE WITH KADAN
+# ============================================================
+
+async def _build_bill_detail_response(
+    db: AsyncSession,
+    tenant_id: UUID,
+    bill,
+) -> BillResponse:
+    """
+    Build a bill response and attach the CREDIT transaction
+    associated with this bill, if one exists.
+
+    Historical bill Kadan and current customer outstanding
+    are deliberately returned as separate values.
+    """
+
+    response = BillResponse.model_validate(bill)
+
+    transaction = (
+        await bill_repository.get_kadan_details_for_bill(
+            db=db,
+            tenant_id=tenant_id,
+            bill_id=bill.id,
+        )
+    )
+
+    # No Kadan CREDIT transaction was created for this bill.
+    if transaction is None:
+        response.kadan = None
+        return response
+
+    # Calculate actual completed payments for this bill.
+    paid_amount = sum(
+        (
+            Decimal(str(payment.amount))
+            for payment in (bill.payments or [])
+            if (payment.status or "").upper() == "COMPLETED"
+        ),
+        Decimal("0.00"),
+    )
+
+    account = transaction.kadan_account
+
+    current_outstanding = (
+        Decimal(str(account.outstanding_amount))
+        if account is not None
+        and account.outstanding_amount is not None
+        else Decimal("0.00")
+    )
+
+    response.kadan = {
+        "paid_amount": paid_amount,
+        # Historical amount added by this bill.
+        "kadan_amount": Decimal(str(transaction.amount)),
+        # Existing field: now represents current account balance.
+        "outstanding_amount": current_outstanding,
+        "transaction_id": transaction.id,
+        "account_id": transaction.kadan_account_id,
+        "transaction_type": transaction.transaction_type,
+        "balance_after_transaction": transaction.balance_after,
+        "notes": transaction.notes,
+        "created_at": transaction.created_at,
+    }
+
+    return response
 
 
 # ============================================================
@@ -192,7 +229,11 @@ async def get_bill_by_number(
             detail="Bill not found",
         )
 
-    return bill
+    return await _build_bill_detail_response(
+        db=db,
+        tenant_id=tenant_id,
+        bill=bill,
+    )
 
 
 # ============================================================
@@ -222,4 +263,8 @@ async def get_bill(
             detail="Bill not found",
         )
 
-    return bill
+    return await _build_bill_detail_response(
+        db=db,
+        tenant_id=tenant_id,
+        bill=bill,
+    )
