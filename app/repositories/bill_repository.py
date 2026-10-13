@@ -17,6 +17,10 @@ from app.models.kadan_transaction import KadanTransaction
 
 class BillRepository:
 
+    # ============================================================
+    # GET PRODUCT VARIANTS FOR BILLING
+    # ============================================================
+
     async def get_variants_for_billing(
         self,
         db: AsyncSession,
@@ -25,7 +29,9 @@ class BillRepository:
     ):
         result = await db.execute(
             select(ProductVariant)
-            .options(selectinload(ProductVariant.product))
+            .options(
+                selectinload(ProductVariant.product)
+            )
             .where(
                 ProductVariant.id.in_(variant_ids),
                 ProductVariant.tenant_id == tenant_id,
@@ -33,7 +39,12 @@ class BillRepository:
             )
             .with_for_update()
         )
+
         return list(result.scalars().all())
+
+    # ============================================================
+    # GET CUSTOMER BY PHONE
+    # ============================================================
 
     async def get_customer_by_phone(
         self,
@@ -42,13 +53,19 @@ class BillRepository:
         phone: str,
     ):
         result = await db.execute(
-            select(Customer).where(
+            select(Customer)
+            .where(
                 Customer.tenant_id == tenant_id,
                 Customer.phone == phone,
                 Customer.status == "ACTIVE",
             )
         )
+
         return result.scalar_one_or_none()
+
+    # ============================================================
+    # CREATE CUSTOMER
+    # ============================================================
 
     async def create_customer(
         self,
@@ -63,9 +80,16 @@ class BillRepository:
             phone=phone,
             status="ACTIVE",
         )
+
         db.add(customer)
+
         await db.flush()
+
         return customer
+
+    # ============================================================
+    # GET HIGHEST BILL NUMBER
+    # ============================================================
 
     async def get_latest_bill_number(
         self,
@@ -74,7 +98,7 @@ class BillRepository:
     ):
         from app.models.tenant import Tenant
 
-        # Serialize bill number generation per tenant.
+        # Lock tenant row to serialize bill number generation.
         await db.execute(
             select(Tenant.id)
             .where(Tenant.id == tenant_id)
@@ -85,16 +109,25 @@ class BillRepository:
             select(
                 func.max(
                     func.cast(
-                        func.substring(Bill.bill_number, 6),
+                        func.substring(
+                            Bill.bill_number,
+                            6,
+                        ),
                         Integer,
                     )
                 )
-            ).where(
+            )
+            .where(
                 Bill.tenant_id == tenant_id,
                 Bill.bill_number.like("BILL-%"),
             )
         )
+
         return result.scalar_one_or_none()
+
+    # ============================================================
+    # CREATE BILL
+    # ============================================================
 
     async def create_bill(
         self,
@@ -102,8 +135,14 @@ class BillRepository:
         bill: Bill,
     ):
         db.add(bill)
+
         await db.flush()
+
         return bill
+
+    # ============================================================
+    # CREATE SINGLE BILL ITEM
+    # ============================================================
 
     async def create_bill_item(
         self,
@@ -111,8 +150,14 @@ class BillRepository:
         bill_item: BillItem,
     ):
         db.add(bill_item)
+
         await db.flush()
+
         return bill_item
+
+    # ============================================================
+    # CREATE MULTIPLE BILL ITEMS
+    # ============================================================
 
     async def create_bill_items(
         self,
@@ -120,8 +165,14 @@ class BillRepository:
         bill_items: list[BillItem],
     ):
         db.add_all(bill_items)
+
         await db.flush()
+
         return bill_items
+
+    # ============================================================
+    # CREATE PAYMENT
+    # ============================================================
 
     async def create_payment(
         self,
@@ -129,8 +180,14 @@ class BillRepository:
         payment: Payment,
     ):
         db.add(payment)
+
         await db.flush()
+
         return payment
+
+    # ============================================================
+    # GET KADAN ACCOUNT
+    # ============================================================
 
     async def get_kadan_account(
         self,
@@ -139,17 +196,24 @@ class BillRepository:
         customer_id: UUID,
         for_update: bool = False,
     ):
-        query = select(KadanAccount).where(
-            KadanAccount.tenant_id == tenant_id,
-            KadanAccount.customer_id == customer_id,
-            KadanAccount.status == "ACTIVE",
+        query = (
+            select(KadanAccount)
+            .where(
+                KadanAccount.tenant_id == tenant_id,
+                KadanAccount.customer_id == customer_id,
+            )
         )
 
         if for_update:
             query = query.with_for_update()
 
         result = await db.execute(query)
+
         return result.scalar_one_or_none()
+
+    # ============================================================
+    # CREATE KADAN ACCOUNT
+    # ============================================================
 
     async def create_kadan_account(
         self,
@@ -157,8 +221,14 @@ class BillRepository:
         kadan_account: KadanAccount,
     ):
         db.add(kadan_account)
+
         await db.flush()
+
         return kadan_account
+
+    # ============================================================
+    # CREATE KADAN TRANSACTION
+    # ============================================================
 
     async def create_kadan_transaction(
         self,
@@ -166,8 +236,14 @@ class BillRepository:
         transaction: KadanTransaction,
     ):
         db.add(transaction)
+
         await db.flush()
+
         return transaction
+
+    # ============================================================
+    # UPDATE STOCK
+    # ============================================================
 
     async def update_stock(
         self,
@@ -175,44 +251,12 @@ class BillRepository:
         quantity: Decimal,
     ):
         variant.stock_quantity -= quantity
+
         return variant
 
-    # ---------------------------------------------------------
-    # KADAN DETAILS LINKED TO A PARTICULAR BILL
-    # ---------------------------------------------------------
-
-    async def get_kadan_details_for_bill(
-        self,
-        db: AsyncSession,
-        tenant_id: UUID,
-        bill_id: UUID,
-    ):
-        """
-        Fetch the CREDIT transaction created by this bill.
-
-        The transaction amount is the historical Kadan amount
-        created by this bill. The linked account contains the
-        customer's current outstanding balance.
-        """
-        result = await db.execute(
-            select(KadanTransaction)
-            .options(
-                selectinload(
-                    KadanTransaction.kadan_account
-                )
-            )
-            .where(
-                KadanTransaction.tenant_id == tenant_id,
-                KadanTransaction.bill_id == bill_id,
-                KadanTransaction.transaction_type == "CREDIT",
-            )
-            .order_by(
-                KadanTransaction.created_at.desc(),
-                KadanTransaction.id.desc(),
-            )
-            .limit(1)
-        )
-        return result.scalar_one_or_none()
+    # ============================================================
+    # GET BILL BY ID
+    # ============================================================
 
     async def get_bill_by_id(
         self,
@@ -232,7 +276,12 @@ class BillRepository:
                 Bill.tenant_id == tenant_id,
             )
         )
+
         return result.scalar_one_or_none()
+
+    # ============================================================
+    # GET BILL BY BILL NUMBER
+    # ============================================================
 
     async def get_bill_by_number(
         self,
@@ -252,7 +301,12 @@ class BillRepository:
                 Bill.bill_number == bill_number,
             )
         )
+
         return result.scalar_one_or_none()
+
+    # ============================================================
+    # GET BILLS
+    # ============================================================
 
     async def get_bills(
         self,
@@ -268,12 +322,23 @@ class BillRepository:
                 selectinload(Bill.payments),
                 selectinload(Bill.customer),
             )
-            .where(Bill.tenant_id == tenant_id)
-            .order_by(Bill.created_at.desc())
+            .where(
+                Bill.tenant_id == tenant_id,
+            )
+            .order_by(
+                Bill.created_at.desc()
+            )
             .limit(limit)
             .offset(offset)
         )
-        return list(result.scalars().unique().all())
+
+        return list(
+            result.scalars().unique().all()
+        )
+
+    # ============================================================
+    # DATE SUMMARY STATS
+    # ============================================================
 
     async def get_date_summary_stats(
         self,
@@ -289,7 +354,8 @@ class BillRepository:
                     func.sum(Bill.total_amount),
                     Decimal("0.00"),
                 ),
-            ).where(
+            )
+            .where(
                 Bill.tenant_id == tenant_id,
                 Bill.status != "CANCELLED",
                 Bill.created_at >= start_date,
@@ -298,10 +364,15 @@ class BillRepository:
         )
 
         row = result.first()
+
         return {
             "total_bills": row[0] or 0,
             "total_sales": row[1] or Decimal("0.00"),
         }
+
+    # ============================================================
+    # GET BILLS BY DATE RANGE
+    # ============================================================
 
     async def get_bills_by_date_range(
         self,
@@ -317,9 +388,16 @@ class BillRepository:
                 Bill.created_at >= start_date,
                 Bill.created_at < end_date,
             )
-            .order_by(Bill.created_at.desc())
+            .order_by(
+                Bill.created_at.desc()
+            )
         )
+
         return list(result.scalars().all())
 
+
+# ================================================================
+# REPOSITORY INSTANCE
+# ================================================================
 
 bill_repository = BillRepository()
