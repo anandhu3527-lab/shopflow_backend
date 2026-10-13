@@ -6,6 +6,7 @@ import logging
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.models.bill import Bill
 from app.models.bill_item import BillItem
@@ -763,24 +764,45 @@ class BillingService:
                 )
 
                 # ------------------------------------------------
-                # CREATE ACCOUNT
+                # CREATE ACCOUNT IF MISSING
+                # ------------------------------------------------
+                # Settled accounts are returned by get_kadan_account()
+                # and reused. A savepoint protects the outer bill
+                # transaction if a concurrent request creates the
+                # same account after our initial lookup.
                 # ------------------------------------------------
 
                 if kadan_account is None:
+                    try:
+                        async with db.begin_nested():
+                            new_account = KadanAccount(
+                                tenant_id=tenant_id,
+                                customer_id=customer.id,
+                                outstanding_amount=MONEY_ZERO,
+                                status="ACTIVE",
+                            )
 
-                    kadan_account = KadanAccount(
-                        tenant_id=tenant_id,
-                        customer_id=customer.id,
-                        outstanding_amount=MONEY_ZERO,
-                        status="ACTIVE",
-                    )
+                            await bill_repository.create_kadan_account(
+                                db=db,
+                                kadan_account=new_account,
+                            )
 
-                    await (
-                        bill_repository.create_kadan_account(
-                            db=db,
-                            kadan_account=kadan_account,
+                        kadan_account = new_account
+
+                    except IntegrityError:
+                        # Only recover if the account now exists.
+                        # Otherwise this was a different integrity error.
+                        kadan_account = (
+                            await bill_repository.get_kadan_account(
+                                db=db,
+                                tenant_id=tenant_id,
+                                customer_id=customer.id,
+                                for_update=True,
+                            )
                         )
-                    )
+
+                        if kadan_account is None:
+                            raise
 
                 # ------------------------------------------------
                 # CURRENT OUTSTANDING
@@ -810,6 +832,9 @@ class BillingService:
                 kadan_account.outstanding_amount = (
                     new_outstanding
                 )
+
+                # Reopen a settled account when new credit is added.
+                kadan_account.status = "ACTIVE"
 
                 # ------------------------------------------------
                 # CREATE KADAN TRANSACTION
