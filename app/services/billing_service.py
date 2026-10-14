@@ -393,6 +393,15 @@ class BillingService:
 
                     quantity=quantity,
                     unit_price=unit_price,
+                    # Store a historical snapshot only when an offer
+                    # price was actually applied. This value does not
+                    # change if the product's price changes later.
+                    offer_price=(
+                        unit_price
+                        if offer_price is not None
+                        and offer_price > MONEY_ZERO
+                        else None
+                    ),
 
                     # The discount is a BILL-LEVEL discount.
                     # Therefore bill item discount remains zero.
