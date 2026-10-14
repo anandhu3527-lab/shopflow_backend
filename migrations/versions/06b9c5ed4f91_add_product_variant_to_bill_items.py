@@ -1,7 +1,9 @@
-"""Add historical offer price to bill items.
 
-Revision ID: c7d8e9f0a1b2
-Revises: a1b2c3d4e5f6
+"""add product variant to bill items
+
+Revision ID: 06b9c5ed4f91
+Revises: 88e68b65ad25
+Create Date: 2026-09-11 23:38:32.184816
 """
 
 from typing import Sequence, Union
@@ -10,20 +12,51 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = "c7d8e9f0a1b2"
-down_revision: Union[str, Sequence[str], None] = "a1b2c3d4e5f6"
+# revision identifiers, used by Alembic.
+revision: str = "06b9c5ed4f91"
+down_revision: Union[str, Sequence[str], None] = "88e68b65ad25"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Nullable so existing bills remain valid and their offer price is
-    # not guessed or fabricated.
+    """Upgrade database schema."""
     op.add_column(
         "bill_items",
-        sa.Column("offer_price", sa.Numeric(precision=12, scale=2), nullable=True),
+        sa.Column("product_variant_id", sa.UUID(), nullable=True),
+    )
+
+    op.create_index(
+        op.f("ix_bill_items_product_variant_id"),
+        "bill_items",
+        ["product_variant_id"],
+        unique=False,
+    )
+
+    op.create_foreign_key(
+        None,
+        "bill_items",
+        "product_variants",
+        ["product_variant_id"],
+        ["id"],
+        ondelete="SET NULL",
     )
 
 
 def downgrade() -> None:
-    op.drop_column("bill_items", "offer_price")
+    """Downgrade database schema."""
+    op.drop_constraint(
+        None,
+        "bill_items",
+        type_="foreignkey",
+    )
+
+    op.drop_index(
+        op.f("ix_bill_items_product_variant_id"),
+        table_name="bill_items",
+    )
+
+    op.drop_column(
+        "bill_items",
+        "product_variant_id",
+    )
