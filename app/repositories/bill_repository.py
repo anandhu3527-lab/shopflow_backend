@@ -1,3 +1,4 @@
+
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -29,9 +30,7 @@ class BillRepository:
     ):
         result = await db.execute(
             select(ProductVariant)
-            .options(
-                selectinload(ProductVariant.product)
-            )
+            .options(selectinload(ProductVariant.product))
             .where(
                 ProductVariant.id.in_(variant_ids),
                 ProductVariant.tenant_id == tenant_id,
@@ -39,7 +38,6 @@ class BillRepository:
             )
             .with_for_update()
         )
-
         return list(result.scalars().all())
 
     # ============================================================
@@ -53,14 +51,12 @@ class BillRepository:
         phone: str,
     ):
         result = await db.execute(
-            select(Customer)
-            .where(
+            select(Customer).where(
                 Customer.tenant_id == tenant_id,
                 Customer.phone == phone,
                 Customer.status == "ACTIVE",
             )
         )
-
         return result.scalar_one_or_none()
 
     # ============================================================
@@ -80,11 +76,8 @@ class BillRepository:
             phone=phone,
             status="ACTIVE",
         )
-
         db.add(customer)
-
         await db.flush()
-
         return customer
 
     # ============================================================
@@ -109,20 +102,15 @@ class BillRepository:
             select(
                 func.max(
                     func.cast(
-                        func.substring(
-                            Bill.bill_number,
-                            6,
-                        ),
+                        func.substring(Bill.bill_number, 6),
                         Integer,
                     )
                 )
-            )
-            .where(
+            ).where(
                 Bill.tenant_id == tenant_id,
                 Bill.bill_number.like("BILL-%"),
             )
         )
-
         return result.scalar_one_or_none()
 
     # ============================================================
@@ -135,9 +123,7 @@ class BillRepository:
         bill: Bill,
     ):
         db.add(bill)
-
         await db.flush()
-
         return bill
 
     # ============================================================
@@ -150,9 +136,7 @@ class BillRepository:
         bill_item: BillItem,
     ):
         db.add(bill_item)
-
         await db.flush()
-
         return bill_item
 
     # ============================================================
@@ -165,9 +149,7 @@ class BillRepository:
         bill_items: list[BillItem],
     ):
         db.add_all(bill_items)
-
         await db.flush()
-
         return bill_items
 
     # ============================================================
@@ -180,9 +162,7 @@ class BillRepository:
         payment: Payment,
     ):
         db.add(payment)
-
         await db.flush()
-
         return payment
 
     # ============================================================
@@ -196,19 +176,47 @@ class BillRepository:
         customer_id: UUID,
         for_update: bool = False,
     ):
-        query = (
-            select(KadanAccount)
-            .where(
-                KadanAccount.tenant_id == tenant_id,
-                KadanAccount.customer_id == customer_id,
-            )
+        query = select(KadanAccount).where(
+            KadanAccount.tenant_id == tenant_id,
+            KadanAccount.customer_id == customer_id,
         )
 
         if for_update:
             query = query.with_for_update()
 
         result = await db.execute(query)
+        return result.scalar_one_or_none()
 
+    # ============================================================
+    # GET KADAN CREDIT DETAILS FOR A BILL
+    # ============================================================
+
+    async def get_kadan_details_for_bill(
+        self,
+        db: AsyncSession,
+        tenant_id: UUID,
+        bill_id: UUID,
+    ):
+        """
+        Fetch the original CREDIT transaction associated with a bill.
+
+        Tenant filtering prevents transactions belonging to another
+        tenant from being returned. The account relationship is eagerly
+        loaded for the bill-detail response.
+        """
+        result = await db.execute(
+            select(KadanTransaction)
+            .options(
+                selectinload(KadanTransaction.kadan_account)
+            )
+            .where(
+                KadanTransaction.tenant_id == tenant_id,
+                KadanTransaction.bill_id == bill_id,
+                KadanTransaction.transaction_type == "CREDIT",
+            )
+            .order_by(KadanTransaction.created_at.desc())
+            .limit(1)
+        )
         return result.scalar_one_or_none()
 
     # ============================================================
@@ -221,9 +229,7 @@ class BillRepository:
         kadan_account: KadanAccount,
     ):
         db.add(kadan_account)
-
         await db.flush()
-
         return kadan_account
 
     # ============================================================
@@ -236,9 +242,7 @@ class BillRepository:
         transaction: KadanTransaction,
     ):
         db.add(transaction)
-
         await db.flush()
-
         return transaction
 
     # ============================================================
@@ -251,7 +255,6 @@ class BillRepository:
         quantity: Decimal,
     ):
         variant.stock_quantity -= quantity
-
         return variant
 
     # ============================================================
@@ -276,7 +279,6 @@ class BillRepository:
                 Bill.tenant_id == tenant_id,
             )
         )
-
         return result.scalar_one_or_none()
 
     # ============================================================
@@ -301,7 +303,6 @@ class BillRepository:
                 Bill.bill_number == bill_number,
             )
         )
-
         return result.scalar_one_or_none()
 
     # ============================================================
@@ -322,19 +323,12 @@ class BillRepository:
                 selectinload(Bill.payments),
                 selectinload(Bill.customer),
             )
-            .where(
-                Bill.tenant_id == tenant_id,
-            )
-            .order_by(
-                Bill.created_at.desc()
-            )
+            .where(Bill.tenant_id == tenant_id)
+            .order_by(Bill.created_at.desc())
             .limit(limit)
             .offset(offset)
         )
-
-        return list(
-            result.scalars().unique().all()
-        )
+        return list(result.scalars().unique().all())
 
     # ============================================================
     # DATE SUMMARY STATS
@@ -354,8 +348,7 @@ class BillRepository:
                     func.sum(Bill.total_amount),
                     Decimal("0.00"),
                 ),
-            )
-            .where(
+            ).where(
                 Bill.tenant_id == tenant_id,
                 Bill.status != "CANCELLED",
                 Bill.created_at >= start_date,
@@ -364,7 +357,6 @@ class BillRepository:
         )
 
         row = result.first()
-
         return {
             "total_bills": row[0] or 0,
             "total_sales": row[1] or Decimal("0.00"),
@@ -388,11 +380,8 @@ class BillRepository:
                 Bill.created_at >= start_date,
                 Bill.created_at < end_date,
             )
-            .order_by(
-                Bill.created_at.desc()
-            )
+            .order_by(Bill.created_at.desc())
         )
-
         return list(result.scalars().all())
 
 
