@@ -119,6 +119,7 @@ class BillItemResponse(BaseModel):
     item_name: str
     quantity: Decimal
     unit_price: Decimal
+    offer_price: Decimal | None = None
     discount_amount: Decimal
     tax_rate: Decimal
     tax_amount: Decimal
