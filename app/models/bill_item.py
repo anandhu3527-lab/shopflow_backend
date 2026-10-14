@@ -107,6 +107,14 @@ class BillItem(Base):
         nullable=False,
     )
 
+    # Offer price actually applied when this bill was created.
+    # NULL means no offer price was applied to this historical item.
+    offer_price: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2),
+        nullable=True,
+        default=None,
+    )
+
     # ---------------------------------------------------------
     # Discount
     # ---------------------------------------------------------
