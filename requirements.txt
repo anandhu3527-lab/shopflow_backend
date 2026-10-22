@@ -1,0 +1,12 @@
+fastapi 
+uvicorn 
+sqlalchemy[asyncio]
+asyncpg 
+alembic 
+pydantic-settings 
+python-jose[cryptography] 
+argon2-cffi 
+pytest 
+httpx
+slowapi
+email-validator
