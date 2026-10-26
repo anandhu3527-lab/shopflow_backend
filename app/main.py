@@ -13,6 +13,7 @@ from app.api.v1.users import router as users_router
 from app.api.v1.categories import router as categories_router
 from app.api.v1.products import router as products_router
 from app.api.v1.bills import router as bills_router
+from app.api.v1.vegetables import router as vegetables_router
 from app.api.v1.kadan import router as kadan_router
 from app.api.v1.customers import router as customers_router
 from app.api.v1.reports import router as reports_router
@@ -197,6 +198,12 @@ app.include_router(
 # Billing
 app.include_router(
     bills_router,
+    prefix="/api/v1",
+)
+
+# Weight-based vegetables (separate additive endpoints)
+app.include_router(
+    vegetables_router,
     prefix="/api/v1",
 )
 
