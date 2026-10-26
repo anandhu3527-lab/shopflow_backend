@@ -310,6 +310,18 @@ class BillingService:
                     rounding=ROUND_HALF_UP,
                 )
 
+                logger.info(
+                    "Billing price audit | tenant_id=%s variant_id=%s "
+                    "quantity=%s selling_price=%s offer_price=%s "
+                    "selected_unit_price=%s",
+                    tenant_id,
+                    variant.id,
+                    quantity,
+                    selling_price,
+                    offer_price,
+                    unit_price,
+                )
+
                 # =================================================
                 # TAX RATE
                 # =================================================
@@ -473,6 +485,27 @@ class BillingService:
             if total_amount < MONEY_ZERO:
                 total_amount = MONEY_ZERO
 
+            outstanding_amount = (
+                total_amount - paid_amount
+            ).quantize(
+                MONEY_QUANT,
+                rounding=ROUND_HALF_UP,
+            )
+
+            logger.info(
+                "Billing payment audit | tenant_id=%s subtotal=%s "
+                "tax=%s discount=%s final_total=%s paid_amount=%s "
+                "outstanding=%s payment_method=%s",
+                tenant_id,
+                subtotal,
+                total_tax,
+                discount_amount,
+                total_amount,
+                paid_amount,
+                max(outstanding_amount, MONEY_ZERO),
+                payment_method,
+            )
+
             # ====================================================
             # 10. PAYMENT VALIDATION
             # ====================================================
@@ -570,8 +603,15 @@ class BillingService:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail=(
-                            "Customer name and phone number "
-                            "are required for Kadan bills."
+                            "The payment is below the backend-calculated "
+                            f"final bill total. Final total: ₹{total_amount:.2f}; "
+                            f"received: ₹{paid_amount:.2f}; "
+                            f"unpaid balance: ₹{kadan_amount:.2f}. "
+                            "If the customer paid in full, compare the "
+                            "Billing price audit and Billing payment audit "
+                            "entries in Render logs. Customer name and phone "
+                            "are required only when recording a genuine "
+                            "outstanding Kadan balance."
                         ),
                     )
 
