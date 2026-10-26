@@ -287,23 +287,33 @@ class BillingService:
                         if variant.selling_price is not None
                         else MONEY_ZERO
                     )
+                ).quantize(
+                    MONEY_QUANT,
+                    rounding=ROUND_HALF_UP,
                 )
 
-                offer_price = (
-                    Decimal(
+                # Always use the offer price loaded from the saved
+                # ProductVariant row, not a client-supplied price.
+                # A valid offer must be positive and strictly below
+                # the original selling price.
+                offer_price = None
+                if variant.offer_price is not None:
+                    offer_price = Decimal(
                         str(variant.offer_price)
+                    ).quantize(
+                        MONEY_QUANT,
+                        rounding=ROUND_HALF_UP,
                     )
-                    if variant.offer_price is not None
-                    else None
-                )
 
-                if (
+                offer_applied = (
                     offer_price is not None
                     and offer_price > MONEY_ZERO
-                ):
-                    unit_price = offer_price
-                else:
-                    unit_price = selling_price
+                    and offer_price < selling_price
+                )
+
+                unit_price = (
+                    offer_price if offer_applied else selling_price
+                )
 
                 unit_price = unit_price.quantize(
                     MONEY_QUANT,
@@ -311,14 +321,16 @@ class BillingService:
                 )
 
                 logger.info(
-                    "Billing price audit | tenant_id=%s variant_id=%s "
-                    "quantity=%s selling_price=%s offer_price=%s "
-                    "selected_unit_price=%s",
+                    "SHOPFLOW_BILL_PRICE | tenant_id=%s variant_id=%s "
+                    "product_id=%s quantity=%s selling_price=%s "
+                    "db_offer_price=%s offer_applied=%s selected_unit_price=%s",
                     tenant_id,
                     variant.id,
+                    variant.product_id,
                     quantity,
                     selling_price,
                     offer_price,
+                    offer_applied,
                     unit_price,
                 )
 
@@ -409,10 +421,7 @@ class BillingService:
                     # price was actually applied. This value does not
                     # change if the product's price changes later.
                     offer_price=(
-                        unit_price
-                        if offer_price is not None
-                        and offer_price > MONEY_ZERO
-                        else None
+                        unit_price if offer_applied else None
                     ),
 
                     # The discount is a BILL-LEVEL discount.
