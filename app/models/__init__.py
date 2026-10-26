@@ -24,3 +24,6 @@ from app.models.audit_log import AuditLog
 from app.models.subscription import Subscription
 
 __all__ = ["Tenant", "User", "Role", "UserRole", "Category", "Product", "ProductVariant", "Customer", "Bill", "BillItem", "Payment", "KadanAccount", "KadanTransaction", "AuditLog", "Subscription"]
+from app.models.vegetable_item import VegetableItem
+
+__all__.append("VegetableItem")
