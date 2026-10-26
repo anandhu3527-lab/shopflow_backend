@@ -599,6 +599,23 @@ class BillingService:
             if kadan_amount < MONEY_ZERO:
                 kadan_amount = MONEY_ZERO
 
+            # Diagnostic: capture the exact server-side amounts used to
+            # determine whether this bill has an unpaid Kadan balance.
+            # This does not change payment or Kadan calculations.
+            logger.warning(
+                "BILLING_DIAGNOSTIC | tenant_id=%s | subtotal=%s | "
+                "tax=%s | discount=%s | total=%s | paid=%s | "
+                "kadan=%s | method=%s",
+                tenant_id,
+                subtotal,
+                total_tax,
+                discount_amount,
+                total_amount,
+                paid_amount,
+                kadan_amount,
+                payment_method,
+            )
+
             # ====================================================
             # 14. CUSTOMER REQUIRED FOR KADAN
             # ====================================================
